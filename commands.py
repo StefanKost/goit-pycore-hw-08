@@ -84,6 +84,29 @@ def show_birthday(args: List[str], address_book: AddressBook) -> str:
 
 
 @input_error
+def save(args: List[str], address_book: AddressBook) -> str:
+    if not args:
+        raise ValueError("Save command requires a filename argument")
+    filename = args[0]
+    address_book.save(filename)
+    return f"Data saved to {address_book.get_filename()}."
+
+
+@input_error
+def load(args: List[str], address_book: AddressBook) -> str:
+    if not args:
+        raise ValueError("Load command requires a filename argument")
+    filename = args[0]
+    loaded_book = AddressBook.load(filename)
+    count = len(loaded_book.data)
+    address_book.data.clear()
+    address_book.data.update(loaded_book.data)
+    address_book.set_filename(filename)
+    print(AddressBook.record_counter)
+    return f"Address book loaded from {address_book.get_filename()}. {count} contact(s) found."
+
+
+@input_error
 def birthdays(address_book: AddressBook) -> str:
     upcoming_birthdays = address_book.get_upcoming_birthdays()
     if not upcoming_birthdays:
@@ -102,4 +125,6 @@ commands: Dict[str, Callable[[List[str], AddressBook], str]] = {
     "add-birthday": add_birthday,
     "show-birthday": show_birthday,
     "birthdays": lambda args, address_book: birthdays(address_book),
+    "save": save,
+    "load": load,
 }

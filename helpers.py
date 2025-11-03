@@ -13,6 +13,8 @@ def input_error(func):
             return e.message
         except InvalidBirthday as e:
             return e.message
+        except InvalidFilename as e:
+            return e.message
         except KeyError as e:
             return f"Error: {e}"
         except ValueError as e:

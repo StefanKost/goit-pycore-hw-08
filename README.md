@@ -16,5 +16,7 @@ python main.py
 | `show-birthday` | `show-birthday <username>`                  | Show contact's birthday                              |
 | `birthdays`     | `birthdays`                                 | Show upcoming (next week) birthdays                  |
 | `all`           | `all`                                       | Show all contacts and their phones                   |
+| `save`          | `save <filename>`                           | Save data to the custom file                         |
+| `load`          | `load <filename>`                           | Load data from the custom file                       |
 | `hello`         | `hello`                                     | Show greeting                                        |
 | `exit`          | `exit` or `close`                           | Exit the bot                                         |

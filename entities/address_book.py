@@ -1,12 +1,24 @@
 from datetime import datetime, timedelta
+from typing import Optional
 from collections import UserDict
 from entities.record import Record
-from exceptions.conflict_error import ConflictError
-from exceptions.not_found_error import NotFoundError
+from exceptions import ConflictError, NotFoundError, InvalidFilename
+import os
+import re
+from pathlib import Path
+import tempfile
+import pickle
 
 
 class AddressBook(UserDict):
+    DEFAULT_FILENAME = "addressbook.pkl"
+    DATA_DIR = Path("data")
     record_counter: int = 0
+
+    def __init__(self, dict=None, /, **kwargs):
+        super().__init__(dict, **kwargs)
+        self.__filename: str = AddressBook.DEFAULT_FILENAME
+        AddressBook.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     def add_record(self, record: Record) -> None:
         if any(str(existing) == str(record) for existing in self.data.values()):
@@ -88,3 +100,92 @@ class AddressBook(UserDict):
             raise NotFoundError("Contact")
         return key
 
+    def set_filename(self, filename: str) -> None:
+        self.__filename = self.set_file_extension(filename)
+
+    def get_filename(self) -> str:
+        return self.__filename or self.DEFAULT_FILENAME
+
+    def save(self, filename: Optional[str] = None) -> None:
+        name = filename if filename is not None else self.get_filename()
+        self.validate_filename(name)
+        name = self.set_file_extension(name)
+        filepath = AddressBook.DATA_DIR / name
+
+        tmp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                    mode="wb", delete=False, dir=str(AddressBook.DATA_DIR), prefix=Path(name).stem + "_", suffix=".tmp"
+            ) as tmp:
+                tmp_file = Path(tmp.name)
+                pickle.dump(self, tmp)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp_file, filepath)
+            self.set_filename(name)
+        except (OSError, pickle.PicklingError) as e:
+            if tmp_file and tmp_file.exists():
+                try:
+                    tmp_file.unlink()
+                except OSError:
+                    pass
+            raise IOError(f"Failed to save address book: {e}") from e
+
+    @classmethod
+    def load(cls, filename: Optional[str] = None) -> "AddressBook":
+        name = filename if filename is not None else AddressBook.DEFAULT_FILENAME
+        cls.validate_filename(name)
+        name = cls.set_file_extension(name)
+        filepath = AddressBook.DATA_DIR / name
+
+        is_empty = False
+        if not filepath.exists():
+            is_empty = True
+
+        try:
+            if filepath.stat().st_size == 0:
+                is_empty = True
+        except OSError:
+            is_empty = True
+
+        if is_empty:
+            address_book = cls()
+            address_book.set_filename(name)
+            return address_book
+
+        try:
+            with open(filepath, "rb") as f:
+                address_book = pickle.load(f)
+            if not isinstance(address_book, cls):
+                raise ValueError("Invalid data")
+            address_book.set_filename(name)
+            AddressBook.record_counter = max(address_book.data, default=None)
+            return address_book
+        except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ValueError) as e:
+            raise IOError(f"Failed to load the address book: {e}") from e
+
+    @staticmethod
+    def set_file_extension(name: str):
+        return name if name.endswith(".pkl") else f"{name}.pkl"
+
+    @staticmethod
+    def validate_filename(filename: str):
+        if not isinstance(filename, str) or not filename:
+            raise InvalidFilename("Filename cannot be empty")
+
+        if os.path.basename(filename) != filename:
+            raise InvalidFilename("Filename must not contain directories")
+
+        if re.search(r"(^\.)|(\.\.)", filename):
+            raise InvalidFilename("Filename cannot be relative")
+
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+', filename):
+            raise InvalidFilename("Invalid filename")
+
+        if '.' in filename and not filename.endswith('.pkl'):
+            raise InvalidFilename("Only files with .pkl extension are allowed")
+
+        if len(filename) > 80:
+            raise InvalidFilename("Filename too long (max 80 characters)")
+
+        return True
